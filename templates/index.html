@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anomaly Detection System</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --bg2: #181c27;
+    --bg3: #1e2435;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0;
+    --muted: #7a8099;
+    --blue: #4f8ef7;
+    --green: #3ecf8e;
+    --red: #f5574e;
+    --amber: #f9a825;
+    --radius: 12px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header .logo { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header span { font-size: 13px; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Upload zone */
+  .upload-zone { border: 2px dashed var(--border2); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; position: relative; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--blue); background: rgba(79,142,247,0.05); }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 1rem; }
+  .upload-zone h2 { font-size: 18px; margin-bottom: 0.5rem; }
+  .upload-zone p { font-size: 14px; color: var(--muted); }
+  .upload-zone .formats { margin-top: 0.75rem; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border2); color: var(--muted); }
+
+  /* Progress */
+  #progress-section { display: none; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem 2rem; margin-top: 1.5rem; }
+  .progress-bar-wrap { background: var(--bg3); border-radius: 99px; height: 8px; margin: 1rem 0; overflow: hidden; }
+  .progress-bar { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .3s; width: 0%; }
+  #progress-label { font-size: 13px; color: var(--muted); }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Results */
+  #results-section { display: none; margin-top: 1.5rem; }
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
+  .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-card .value { font-size: 26px; font-weight: 600; }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.blue { color: var(--blue); }
+
+  /* Grid: chart + heatmap */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 1.5rem; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  .panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .panel canvas { width: 100% !important; }
+
+  #heatmap-img { width: 100%; border-radius: 8px; display: block; }
+
+  /* Video player */
+  .video-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .video-panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  #output-video { width: 100%; border-radius: 8px; background: #000; }
+  .video-note { margin-top: 0.75rem; font-size: 13px; color: var(--muted); }
+  .video-note a { color: var(--blue); }
+
+  /* Alert log */
+  .alert-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .alert-panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .alert-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .alert-table th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 500; }
+  .alert-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .alert-table tr:last-child td { border-bottom: none; }
+  .severity { padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .sev-high { background: rgba(245,87,78,0.15); color: var(--red); }
+  .sev-med { background: rgba(249,168,37,0.15); color: var(--amber); }
+  .no-alerts { color: var(--muted); font-size: 14px; padding: 1rem 0; text-align: center; }
+
+  /* Btn */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: opacity .2s; }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border2); color: var(--text); }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #reset-btn { margin-top: 1.5rem; }
+
+  /* Status pill */
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 12px; border-radius: 99px; }
+  .status-pill.processing { background: rgba(79,142,247,0.15); color: var(--blue); }
+  .status-pill.done { background: rgba(62,207,142,0.15); color: var(--green); }
+  .status-pill.error { background: rgba(245,87,78,0.15); color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📡</div>
+  <div>
+    <h1>Machine Vision Anomaly Detection</h1>
+    <span>Motion-based surveillance analysis — no labels required</span>
+  </div>
+</header>
+
+<main>
+  <!-- Upload -->
+  <div class="upload-zone" id="upload-zone">
+    <input type="file" id="file-input" accept=".mp4,.avi,.mov,.mkv,.webm">
+    <div class="icon">🎬</div>
+    <h2>Drop your surveillance video here</h2>
+    <p>Or click to browse — up to 500 MB</p>
+    <div class="formats">
+      <span class="badge">MP4</span>
+      <span class="badge">AVI</span>
+      <span class="badge">MOV</span>
+      <span class="badge">MKV</span>
+      <span class="badge">WEBM</span>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+      <div style="font-size:15px;font-weight:600"><span class="spinner"></span>Processing video…</div>
+      <span class="status-pill processing" id="status-pill">Initializing</span>
+    </div>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+    <div id="progress-label">Starting background subtraction engine…</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-section">
+
+    <!-- Stat cards -->
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="label">Total frames</div>
+        <div class="value blue" id="stat-frames">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Anomaly alerts</div>
+        <div class="value red" id="stat-alerts">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Video FPS</div>
+        <div class="value" id="stat-fps">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Baseline motion</div>
+        <div class="value green" id="stat-baseline">—</div>
+      </div>
+    </div>
+
+    <!-- Video output -->
+    <div class="video-panel">
+      <h3>📼 Annotated output video</h3>
+      <video id="output-video" controls playsinline></video>
+      <div class="video-note" id="video-note" style="display:none"></div>
+    </div>
+
+    <!-- Chart + Heatmap -->
+    <div class="grid2">
+      <div class="panel">
+        <h3>📈 Anomaly score over time</h3>
+        <canvas id="score-chart" height="180"></canvas>
+      </div>
+      <div class="panel">
+        <h3>🌡 Motion heatmap</h3>
+        <img id="heatmap-img" src="" alt="Heatmap loading…">
+      </div>
+    </div>
+
+    <!-- Alert log -->
+    <div class="alert-panel">
+      <h3>⚠️ Alert log</h3>
+      <div id="alert-log-content"></div>
+    </div>
+
+    <button class="btn btn-outline" id="reset-btn" onclick="resetUI()">⟵ Analyze another video</button>
+  </div>
+</main>
+
+<script>
+let chartInstance = null;
+let pollTimer = null;
+
+// Drag-and-drop
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  const allowed = ['video/mp4','video/avi','video/quicktime','video/x-matroska','video/webm','video/x-msvideo'];
+  if (!file.type.startsWith('video/')) {
+    alert('Please select a video file (mp4, avi, mov, mkv, webm).');
+    return;
+  }
+  uploadFile(file);
+}
+
+async function uploadFile(file) {
+  zone.style.display = 'none';
+  document.getElementById('progress-section').style.display = 'block';
+  setProgress(0, 1, 'Uploading video…');
+
+  const fd = new FormData();
+  fd.append('video', file);
+
+  let jobId;
+  try {
+    const r = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    jobId = data.job_id;
+  } catch(err) {
+    showError(err.message);
+    return;
+  }
+
+  pollTimer = setInterval(() => pollStatus(jobId), 1000);
+}
+
+async function pollStatus(jobId) {
+  try {
+    const r = await fetch(`/status/${jobId}`);
+    const data = await r.json();
+
+    if (data.status === 'processing' || data.status === 'queued') {
+      const pct = data.total > 0 ? data.progress / data.total : 0;
+      const phase = pct < 0.15 ? 'Building baseline model…'
+                  : pct < 0.5  ? 'Detecting motion regions…'
+                  : pct < 0.8  ? 'Analyzing temporal patterns…'
+                  : 'Generating heatmap & output…';
+      setProgress(data.progress, data.total, phase);
+    }
+
+    if (data.status === 'done') {
+      clearInterval(pollTimer);
+      setProgress(data.summary.total_frames, data.summary.total_frames, 'Complete!');
+      setTimeout(() => showResults(data.summary), 500);
+    }
+
+    if (data.status === 'error') {
+      clearInterval(pollTimer);
+      showError(data.error || 'Processing failed.');
+    }
+  } catch(e) { /* network hiccup — keep polling */ }
+}
+
+function setProgress(done, total, label) {
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label + (total > 0 ? ` (${done} / ${total} frames)` : '');
+  const pill = document.getElementById('status-pill');
+  if (pct >= 100) { pill.textContent = '✓ Done'; pill.className = 'status-pill done'; }
+  else { pill.innerHTML = `<span class="spinner"></span>${pct}%`; pill.className = 'status-pill processing'; }
+}
+
+function showError(msg) {
+  const pill = document.getElementById('status-pill');
+  pill.textContent = '✗ Error'; pill.className = 'status-pill error';
+  document.getElementById('progress-label').textContent = 'Error: ' + msg;
+}
+
+function showResults(s) {
+  document.getElementById('progress-section').style.display = 'none';
+  document.getElementById('results-section').style.display = 'block';
+
+  // Stats
+  document.getElementById('stat-frames').textContent = s.total_frames.toLocaleString();
+  document.getElementById('stat-alerts').textContent = s.total_alerts;
+  document.getElementById('stat-fps').textContent = Math.round(s.fps);
+  document.getElementById('stat-baseline').textContent = s.baseline_mean !== null ? (s.baseline_mean * 100).toFixed(2) + '%' : 'N/A';
+
+  // Video
+  const videoEl = document.getElementById('output-video');
+  const videoNote = document.getElementById('video-note');
+  videoNote.style.display = 'none';
+  videoNote.textContent = '';
+  if (s.output_video) {
+    const videoUrl = '/output/' + s.output_video + '?t=' + Date.now();
+    videoEl.onerror = () => {
+      videoNote.innerHTML = `This browser could not preview the generated video. <a href="${videoUrl}" download>Download the annotated file</a>.`;
+      videoNote.style.display = 'block';
+    };
+    videoEl.src = videoUrl;
+    videoEl.load();
+  }
+
+  // Heatmap
+  if (s.heatmap) {
+    document.getElementById('heatmap-img').src = '/output/' + s.heatmap + '?t=' + Date.now();
+  }
+
+  // Chart
+  buildChart(s.frame_results);
+
+  // Alerts
+  buildAlertLog(s.alerts);
+}
+
+function buildChart(frames) {
+  // Downsample to ~300 points for performance
+  const step = Math.max(1, Math.floor(frames.length / 300));
+  const sampled = frames.filter((_, i) => i % step === 0);
+  const labels = sampled.map(f => f.frame);
+  const anomalyScores = sampled.map(f => +(f.anomaly_score * 100).toFixed(1));
+  const motionScores = sampled.map(f => +(f.motion_score * 100).toFixed(2));
+
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById('score-chart').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Anomaly score %',
+          data: anomalyScores,
+          borderColor: '#f5574e',
+          backgroundColor: 'rgba(245,87,78,0.08)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.3,
+        },
+        {
+          label: 'Motion level %',
+          data: motionScores,
+          borderColor: '#4f8ef7',
+          backgroundColor: 'rgba(79,142,247,0.05)',
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.3,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      animation: false,
+      plugins: {
+        legend: { labels: { color: '#7a8099', font: { size: 12 } } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7a8099', maxTicksLimit: 6, font: { size: 11 } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          title: { display: true, text: 'Frame', color: '#7a8099', font: { size: 11 } }
+        },
+        y: {
+          ticks: { color: '#7a8099', font: { size: 11 } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          min: 0, max: 100,
+          title: { display: true, text: 'Score (%)', color: '#7a8099', font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+function buildAlertLog(alerts) {
+  const el = document.getElementById('alert-log-content');
+  if (!alerts || alerts.length === 0) {
+    el.innerHTML = '<div class="no-alerts">No anomalies detected — motion patterns stayed within the normal baseline.</div>';
+    return;
+  }
+  const rows = alerts.slice(0, 100).map(a => {
+    const sev = a.anomaly_score > 0.6 ? 'sev-high' : 'sev-med';
+    const sevLabel = a.anomaly_score > 0.6 ? 'HIGH' : 'MED';
+    const ts = formatTime(a.timestamp_sec);
+    return `<tr>
+      <td>${a.frame}</td>
+      <td>${ts}</td>
+      <td>${(a.anomaly_score * 100).toFixed(1)}%</td>
+      <td>${(a.motion_score * 100).toFixed(2)}%</td>
+      <td>${a.region_count}</td>
+      <td><span class="severity ${sev}">${sevLabel}</span></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table class="alert-table">
+    <thead><tr>
+      <th>Frame</th><th>Timestamp</th><th>Anomaly score</th><th>Motion level</th><th>Regions</th><th>Severity</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${alerts.length > 100 ? `<p style="font-size:13px;color:var(--muted);margin-top:0.75rem">Showing first 100 of ${alerts.length} alerts.</p>` : ''}`;
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  const ms = Math.round((sec % 1) * 100).toString().padStart(2, '0');
+  return `${m}:${s}.${ms}`;
+}
+
+function resetUI() {
+  clearInterval(pollTimer);
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  document.getElementById('progress-bar').style.width = '0';
+  zone.style.display = 'block';
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+}
+</script>
+</body>
+</html>
